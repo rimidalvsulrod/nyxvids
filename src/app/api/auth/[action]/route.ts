@@ -1,4 +1,4 @@
-import type { NextRequest } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { randomBytes } from "node:crypto";
 import { encodeSession, googleConfigured, readSession, SESSION_COOKIE } from "@/lib/google";
 
@@ -18,12 +18,12 @@ export async function GET(req: NextRequest, ctx: RouteContext<"/api/auth/[action
   }
 
   if (action === "logout") {
-    const response = Response.redirect(home(req));
+    const response = NextResponse.redirect(home(req));
     response.headers.append("Set-Cookie", `${SESSION_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`);
     return response;
   }
 
-  if (!googleConfigured()) return Response.redirect(home(req, "?auth=setup"));
+  if (!googleConfigured()) return NextResponse.redirect(home(req, "?auth=setup"));
 
   if (action === "login") {
     const state = randomBytes(24).toString("hex");
@@ -39,7 +39,7 @@ export async function GET(req: NextRequest, ctx: RouteContext<"/api/auth/[action
       scope: "openid email profile https://www.googleapis.com/auth/youtube.readonly",
       state
     }).toString();
-    const response = Response.redirect(url);
+    const response = NextResponse.redirect(url);
     response.headers.append("Set-Cookie", `nyxvids_oauth_state=${state}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=600`);
     return response;
   }
@@ -48,7 +48,7 @@ export async function GET(req: NextRequest, ctx: RouteContext<"/api/auth/[action
     const code = req.nextUrl.searchParams.get("code");
     const state = req.nextUrl.searchParams.get("state");
     const savedState = req.cookies.get("nyxvids_oauth_state")?.value;
-    if (!code || !state || state !== savedState) return Response.redirect(home(req, "?auth=failed"));
+    if (!code || !state || state !== savedState) return NextResponse.redirect(home(req, "?auth=failed"));
     const callback = new URL("/api/auth/callback", req.url).toString();
     const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
@@ -61,7 +61,7 @@ export async function GET(req: NextRequest, ctx: RouteContext<"/api/auth/[action
         grant_type: "authorization_code"
       })
     });
-    if (!tokenResponse.ok) return Response.redirect(home(req, "?auth=failed"));
+    if (!tokenResponse.ok) return NextResponse.redirect(home(req, "?auth=failed"));
     const tokens = (await tokenResponse.json()) as { access_token: string; refresh_token?: string; expires_in: number };
     const profileResponse = await fetch("https://openidconnect.googleapis.com/v1/userinfo", {
       headers: { Authorization: `Bearer ${tokens.access_token}` }
@@ -73,7 +73,7 @@ export async function GET(req: NextRequest, ctx: RouteContext<"/api/auth/[action
       refreshToken: tokens.refresh_token,
       expiresAt: Date.now() + tokens.expires_in * 1000
     });
-    const response = Response.redirect(home(req));
+    const response = NextResponse.redirect(home(req));
     response.headers.append("Set-Cookie", `${SESSION_COOKIE}=${session}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000`);
     response.headers.append("Set-Cookie", "nyxvids_oauth_state=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0");
     return response;
